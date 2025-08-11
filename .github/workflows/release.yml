@@ -1,0 +1,44 @@
+name: Release to npm
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+  release:
+    types: [published]
+
+jobs:
+  build-and-publish:
+    name: Build and publish
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish to npm
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_KEY }}
+        run: |
+          npm config set //registry.npmjs.org/:_authToken=$NODE_AUTH_TOKEN
+          npm publish --access public
