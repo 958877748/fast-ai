@@ -1,5 +1,5 @@
 {
-  "name": "fast-ai",
+  "name": "@guolei1994/fast-ai",
   "version": "0.1.0",
   "description": "Isomorphic AI utilities for Node.js and browsers.",
   "license": "MIT",
@@ -31,6 +31,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "clean": "rimraf dist",
     "build:tsup": "tsup src/index.ts --format esm,cjs --dts --sourcemap --minify --clean --out-dir dist",
