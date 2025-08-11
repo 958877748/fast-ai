@@ -152,6 +152,20 @@ yarn lint
 - 生成的类型声明、ESM/CJS 构建产物位于 `dist/`
 - 浏览器全局构建产物：`dist/fast-ai.global.js`、`dist/fast-ai.global.min.js`
 
+### 发布
+
+- **自动发布到 npm**: 提交并打上语义化版本标签（例如 `v0.3.0`）后推送到远端，会触发 GitHub Actions，自动构建并发布到 npm。
+- **发布步骤**:
+  1. 更新版本号：修改 `package.json` 中的 `version`
+  2. 提交与打标签：
+     ```bash
+     git add -A
+     git commit -m "chore(release): 0.3.0"
+     git tag v0.3.0
+     git push && git push --tags
+     ```
+  3. 推送后，CI 将运行构建与测试，并在成功后执行 `npm publish`（需仓库已配置发布用的 npm token）。
+
 ## 许可证
 
 MIT
