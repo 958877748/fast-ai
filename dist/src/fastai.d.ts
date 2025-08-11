@@ -57,5 +57,24 @@ export type GenerateTextOptions = {
 export declare function generateText(options: GenerateTextOptions): Promise<{
     text: string;
 }>;
+export type GenerateObjectOptions<TSchema extends z.ZodTypeAny> = {
+    model: ChatModelRef;
+    schema: TSchema;
+    prompt: string;
+    system?: string;
+} | {
+    client: OpenAIClient;
+    model: string;
+    schema: TSchema;
+    prompt: string;
+    system?: string;
+};
+/**
+ * Generate a structured object validated by the provided Zod schema.
+ * Uses tool-calling to force the model to return the object via a single tool call.
+ */
+export declare function generateObject<TSchema extends z.ZodTypeAny>(options: GenerateObjectOptions<TSchema>): Promise<{
+    object: z.infer<TSchema>;
+}>;
 export {};
 //# sourceMappingURL=fastai.d.ts.map

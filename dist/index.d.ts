@@ -58,6 +58,25 @@ type GenerateTextOptions = {
 declare function generateText(options: GenerateTextOptions): Promise<{
     text: string;
 }>;
+type GenerateObjectOptions<TSchema extends z.ZodTypeAny> = {
+    model: ChatModelRef;
+    schema: TSchema;
+    prompt: string;
+    system?: string;
+} | {
+    client: OpenAIClient;
+    model: string;
+    schema: TSchema;
+    prompt: string;
+    system?: string;
+};
+/**
+ * Generate a structured object validated by the provided Zod schema.
+ * Uses tool-calling to force the model to return the object via a single tool call.
+ */
+declare function generateObject<TSchema extends z.ZodTypeAny>(options: GenerateObjectOptions<TSchema>): Promise<{
+    object: z.infer<TSchema>;
+}>;
 
 type Environment = 'node' | 'browser';
 declare function detectEnvironment(): Environment;
@@ -67,4 +86,4 @@ declare const _default: {
     hello: typeof hello;
 };
 
-export { type ChatMessage, type Environment, type Tool, createOpenAI, createTool, _default as default, detectEnvironment, generateText, hello };
+export { type ChatMessage, type Environment, type Tool, createOpenAI, createTool, _default as default, detectEnvironment, generateObject, generateText, hello };

@@ -184,3 +184,98 @@ export async function generateText(options: GenerateTextOptions): Promise<{ text
         // Loop will continue, sending the tool outputs back to the model
     }
 }
+
+export type GenerateObjectOptions<TSchema extends z.ZodTypeAny> =
+    | {
+          model: ChatModelRef;
+          schema: TSchema;
+          prompt: string;
+          system?: string;
+      }
+    | {
+          client: OpenAIClient;
+          model: string;
+          schema: TSchema;
+          prompt: string;
+          system?: string;
+      };
+
+/**
+ * Generate a structured object validated by the provided Zod schema.
+ * Uses tool-calling to force the model to return the object via a single tool call.
+ */
+export async function generateObject<TSchema extends z.ZodTypeAny>(
+    options: GenerateObjectOptions<TSchema>
+): Promise<{ object: z.infer<TSchema> }> {
+    const schema = options.schema;
+
+    const baseURL = ('client' in options
+        ? (options.client as OpenAIClient).baseURL
+        : (options.model as ChatModelRef).endpoint.replace(/\/(?:chat\/completions)?$/, ''))
+        .replace(/\/$/, '');
+
+    const endpoint = `${baseURL}/chat/completions`;
+    const apiKey = 'client' in options ? options.client.apiKey : (options.model as ChatModelRef).apiKey;
+    const modelName = 'client' in options ? (options.model as string) : (options.model as ChatModelRef).model;
+
+    const systemPreamble =
+        options.system ??
+        'You are a structured-output assistant. Always respond by calling the tool `submit_object` exactly once with the final JSON object. Do not include any other text.';
+
+    const messages: ChatMessage[] = [
+        { role: 'system', content: systemPreamble },
+        { role: 'user', content: options.prompt },
+    ];
+
+    const tools = [
+        {
+            type: 'function' as const,
+            function: {
+                name: 'submit_object',
+                description: 'Submit the final structured object that matches the required schema.',
+                parameters: zodToJsonSchema(schema),
+            },
+        },
+    ];
+
+    const res: ChatRespose = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+            model: modelName,
+            messages,
+            tools,
+        }),
+    }).then(r => r.json());
+
+    const assistant = res.choices?.[0]?.message;
+    if (!assistant) {
+        throw new Error('No message returned');
+    }
+
+    // Prefer tool call for guaranteed structure
+    const toolCalls = assistant.tool_calls ?? [];
+    const submitCall = toolCalls.find(c => c.function?.name === 'submit_object');
+    if (submitCall) {
+        const rawArgs = submitCall.function.arguments || '{}';
+        const parsed = JSON.parse(rawArgs);
+        const validated = schema.parse(parsed);
+        return { object: validated };
+    }
+
+    // Fallback: try to parse the assistant content as JSON and validate
+    if (assistant.content) {
+        try {
+            const fallback = JSON.parse(assistant.content);
+            const validated = schema.parse(fallback);
+            return { object: validated };
+        } catch (_err) {
+            // continue to throw structured error below
+        }
+    }
+
+    throw new Error('Model did not return a structured object. Ensure the model supports tool calling.');
+}
