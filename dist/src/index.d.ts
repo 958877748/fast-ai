@@ -6,6 +6,6 @@ declare const _default: {
     hello: typeof hello;
 };
 export default _default;
-export { createOpenAI, generateText, } from './fastai';
+export { createOpenAI, generateText, createTool, } from './fastai';
 export type { ChatMessage, Tool, } from './fastai';
 //# sourceMappingURL=index.d.ts.map

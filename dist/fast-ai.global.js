@@ -1,6 +1,18 @@
 var FastAI = (function (exports, zodToJsonSchema) {
     'use strict';
 
+    // Helper to create a typed tool with Zod parameters
+    function createTool(options) {
+        const wrappedExecute = async (args) => {
+            return Promise.resolve(options.execute(args));
+        };
+        return {
+            name: options.name,
+            description: options.description,
+            parameters: options.parameters,
+            execute: wrappedExecute,
+        };
+    }
     function createOpenAI(options) {
         const base = (options.baseURL ?? 'https://api-inference.modelscope.cn/v1').replace(/\/$/, '');
         const apiKey = options.apiKey;
@@ -106,6 +118,7 @@ var FastAI = (function (exports, zodToJsonSchema) {
     };
 
     exports.createOpenAI = createOpenAI;
+    exports.createTool = createTool;
     exports.default = index;
     exports.detectEnvironment = detectEnvironment;
     exports.generateText = generateText;

@@ -17,6 +17,7 @@ export default {
 export {
   createOpenAI,
   generateText,
+  createTool,
 } from './fastai';
 
 export type {

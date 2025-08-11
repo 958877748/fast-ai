@@ -12,6 +12,12 @@ type Tool<T extends z.ZodTypeAny> = {
     parameters: T;
     execute: (args: z.infer<T>) => Promise<string>;
 };
+declare function createTool<T extends z.ZodTypeAny>(options: {
+    name: string;
+    description?: string;
+    parameters: T;
+    execute: (args: z.infer<T>) => Promise<string> | string;
+}): Tool<T>;
 type ToolCall = {
     index: number;
     id: string;
@@ -61,4 +67,4 @@ declare const _default: {
     hello: typeof hello;
 };
 
-export { type ChatMessage, type Environment, type Tool, createOpenAI, _default as default, detectEnvironment, generateText, hello };
+export { type ChatMessage, type Environment, type Tool, createOpenAI, createTool, _default as default, detectEnvironment, generateText, hello };

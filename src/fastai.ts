@@ -15,6 +15,24 @@ export type Tool<T extends z.ZodTypeAny> = {
     execute: (args: z.infer<T>) => Promise<string>;
 };
 
+// Helper to create a typed tool with Zod parameters
+export function createTool<T extends z.ZodTypeAny>(options: {
+    name: string;
+    description?: string;
+    parameters: T;
+    execute: (args: z.infer<T>) => Promise<string> | string;
+}): Tool<T> {
+    const wrappedExecute = async (args: z.infer<T>): Promise<string> => {
+        return Promise.resolve(options.execute(args));
+    };
+    return {
+        name: options.name,
+        description: options.description,
+        parameters: options.parameters,
+        execute: wrappedExecute,
+    };
+}
+
 type ToolCall = {
     index: number
     id: string

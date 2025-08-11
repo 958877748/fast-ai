@@ -11,6 +11,12 @@ export type Tool<T extends z.ZodTypeAny> = {
     parameters: T;
     execute: (args: z.infer<T>) => Promise<string>;
 };
+export declare function createTool<T extends z.ZodTypeAny>(options: {
+    name: string;
+    description?: string;
+    parameters: T;
+    execute: (args: z.infer<T>) => Promise<string> | string;
+}): Tool<T>;
 type ToolCall = {
     index: number;
     id: string;
