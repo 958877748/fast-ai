@@ -1,0 +1,64 @@
+{
+  "name": "fast-ai",
+  "version": "0.1.0",
+  "description": "Isomorphic AI utilities for Node.js and browsers.",
+  "license": "MIT",
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "keywords": [
+    "ai",
+    "ml",
+    "isomorphic",
+    "browser",
+    "node",
+    "typescript"
+  ],
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build:tsup": "tsup src/index.ts --format esm,cjs --dts --sourcemap --minify --clean --out-dir dist",
+    "build:global": "rollup -c",
+    "build": "npm run clean && npm run build:tsup && npm run build:global",
+    "dev": "tsup src/index.ts --format esm,cjs --dts --sourcemap --watch --out-dir dist",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.1.4",
+    "@types/node": "^22.5.4",
+    "eslint": "^9.9.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "husky": "^9.1.6",
+    "prettier": "^3.3.3",
+    "rimraf": "^6.0.1",
+    "rollup": "^4.21.2",
+    "tslib": "^2.8.1",
+    "tsup": "^8.2.4",
+    "typescript": "^5.6.2",
+    "vitest": "^2.0.5"
+  },
+  "dependencies": {
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
+  }
+}
