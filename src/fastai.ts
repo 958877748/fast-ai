@@ -52,7 +52,7 @@ type ChatRespose = {
 // Lightweight OpenAI-style client and text generation with tool support
 export type CreateOpenAIOptions = {
     baseURL?: string;
-    apiKey: string;
+    apiKey?: string;
 };
 
 export type ChatModelRef = {
@@ -68,16 +68,23 @@ export type OpenAIClient = ((modelName: string) => ChatModelRef) & {
 };
 
 export function createOpenAI(options: CreateOpenAIOptions = {}): OpenAIClient {
-    const base = (options.baseURL || process.env.OPENAI_BASE_URL).replace(/\/$/, '');
-    const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
+    const rawBase = options.baseURL ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
+    const base = rawBase.replace(/\/$/, '');
+    const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
     if (!apiKey) {
         throw new Error('apiKey is required');
     }
-    const builder = ((modelName?: string): ChatModelRef => ({
-        endpoint: `${base}/chat/completions`,
-        model: modelName || process.env.OPENAI_MODEL,
-        apiKey,
-    })) as OpenAIClient;
+    const builder = ((modelName: string): ChatModelRef => {
+        const finalModel = modelName || process.env.OPENAI_MODEL;
+        if (!finalModel) {
+            throw new Error('model is required');
+        }
+        return {
+            endpoint: `${base}/chat/completions`,
+            model: finalModel,
+            apiKey,
+        };
+    }) as OpenAIClient;
     builder.baseURL = base;
     builder.apiKey = apiKey;
     builder.chat = (modelName: string) => builder(modelName);
@@ -99,7 +106,7 @@ export type GenerateTextOptions =
           onToolCall?: (toolName: string) => void;
       };
 
-export async function generateText(options: GenerateTextOptions): Promise<{ text: string }> {
+export async function generateText(options: GenerateTextOptions): Promise<string> {
     const { messages, onToolCall } = options as any;
     const messageHistory: ChatMessage[] = messages;
 
@@ -131,6 +138,9 @@ export async function generateText(options: GenerateTextOptions): Promise<{ text
     const endpoint = `${baseURL}/chat/completions`;
     const apiKey = 'client' in options ? options.client.apiKey : (options.model as ChatModelRef).apiKey;
     const modelName = 'client' in options ? (options.model as string) : (options.model as ChatModelRef).model;
+    if (!modelName) {
+        throw new Error('model is required');
+    }
 
     while (true) {
         const res: ChatRespose = await fetch(endpoint, {
@@ -155,7 +165,7 @@ export async function generateText(options: GenerateTextOptions): Promise<{ text
 
         const tool_calls = assistant.tool_calls;
         if (!tool_calls || tool_calls.length === 0) {
-            return { text: assistant.content };
+            return assistant.content || '';
         }
 
         if (onToolCall) {

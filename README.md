@@ -1,9 +1,9 @@
 # @guolei1994/fast-ai
 
-轻量、同构（Node.js 与浏览器）的 AI 工具库，提供 OpenAI 风格的对话与函数调用（Tools / Function Calling）能力，默认兼容 ModelScope OpenAI 接口。
+轻量、同构（Node.js 与浏览器）的 AI 工具库，提供 OpenAI 风格的对话与函数调用（Tools / Function Calling）能力，默认兼容 OpenAI/OpenAI 风格接口。
 
 - **同构运行**: 一套 API 同时适用于 Node 与浏览器
-- **OpenAI 风格接口**: 使用 `chat/completions` 语义，默认基于 `https://api-inference.modelscope.cn/v1`
+- **OpenAI 风格接口**: 使用 `chat/completions` 语义，默认基于 `https://api.openai.com/v1`
 - **函数调用（Tools）**: 基于 `zod` 定义参数，自动转换为 JSON Schema
 - **按需集成**: 导出 `createOpenAI`、`generateText`、`createTool` 等实用方法
 
@@ -27,15 +27,15 @@ Node.js 18+（或支持 fetch 的运行时）推荐。
 ```ts
 import { createOpenAI, generateText } from '@guolei1994/fast-ai';
 
-// 你可以使用 ModelScope 的 API Key，或兼容的 OpenAI 风格服务
+// 你可以使用 OpenAI 的 API Key，或兼容的 OpenAI 风格服务
 const client = createOpenAI({
-  // 可选：自定义 baseURL。默认 https://api-inference.modelscope.cn/v1
-  // baseURL: 'https://api-inference.modelscope.cn/v1',
-  apiKey: process.env.MODELSCOPE_API_KEY!,
+  // 可选：自定义 baseURL。默认 https://api.openai.com/v1
+  // baseURL: 'https://api.openai.com/v1',
+  apiKey: process.env.OPENAI_API_KEY!,
 });
 
 async function main() {
-  const { text } = await generateText({
+  const text = await generateText({
     client,
     model: 'Qwen/Qwen2.5-7B-Instruct', // 具体模型名称按服务商实际为准
     messages: [
@@ -67,9 +67,9 @@ const weatherTool = createTool({
   },
 });
 
-const client = createOpenAI({ apiKey: process.env.MODELSCOPE_API_KEY! });
+const client = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-const { text } = await generateText({
+const text = await generateText({
   client,
   model: 'Qwen/Qwen2.5-7B-Instruct',
   messages: [
@@ -100,7 +100,7 @@ console.log(text);
     client,
     model: 'Qwen/Qwen2.5-7B-Instruct',
     messages: [{ role: 'user', content: '你好' }],
-  }).then(({ text }) => {
+  }).then((text) => {
     document.body.innerText = text;
   });
 </script>
@@ -109,15 +109,15 @@ console.log(text);
 ## API 参考
 
 - **createOpenAI(options)**
-  - `options.baseURL?: string` 可选，默认 `https://api-inference.modelscope.cn/v1`
-  - `options.apiKey: string` 必填
+  - `options.baseURL?: string` 可选，默认 `https://api.openai.com/v1`
+  - `options.apiKey?: string` 可选（若不传，将从环境变量 `OPENAI_API_KEY` 读取）
   - 返回 `OpenAIClient`，可用于 `generateText`
 
 - **generateText(options)**
   - 两种调用方式：
     - `{ client: OpenAIClient, model: string, messages: ChatMessage[], tools?, onToolCall? }`
     - `{ model: ChatModelRef, messages: ChatMessage[], tools?, onToolCall? }`（传入由 `createOpenAI` 构造的 `ChatModelRef`）
-  - 返回 `{ text: string }`
+  - 返回值：`Promise<string>`（直接返回文本）
   - 自动处理工具调用循环，直到模型不再返回 `tool_calls`
 
 - **createTool({ name, description?, parameters, execute })**
