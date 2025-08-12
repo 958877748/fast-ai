@@ -56,7 +56,6 @@ export type CreateOpenAIOptions = {
 };
 
 export type ChatModelRef = {
-    provider: 'openai';
     endpoint: string;
     model: string;
     apiKey: string;
@@ -68,16 +67,15 @@ export type OpenAIClient = ((modelName: string) => ChatModelRef) & {
     chat: (modelName: string) => ChatModelRef;
 };
 
-export function createOpenAI(options: CreateOpenAIOptions): OpenAIClient {
-    const base = (options.baseURL ?? 'https://api-inference.modelscope.cn/v1').replace(/\/$/, '');
-    const apiKey = options.apiKey;
+export function createOpenAI(options: CreateOpenAIOptions = {}): OpenAIClient {
+    const base = (options.baseURL || process.env.OPENAI_BASE_URL).replace(/\/$/, '');
+    const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
     if (!apiKey) {
         throw new Error('apiKey is required');
     }
-    const builder = ((modelName: string): ChatModelRef => ({
-        provider: 'openai',
+    const builder = ((modelName?: string): ChatModelRef => ({
         endpoint: `${base}/chat/completions`,
-        model: modelName,
+        model: modelName || process.env.OPENAI_MODEL,
         apiKey,
     })) as OpenAIClient;
     builder.baseURL = base;
@@ -103,7 +101,7 @@ export type GenerateTextOptions =
 
 export async function generateText(options: GenerateTextOptions): Promise<{ text: string }> {
     const { messages, onToolCall } = options as any;
-    const messageHistory: ChatMessage[] = [...messages];
+    const messageHistory: ChatMessage[] = messages;
 
     // Normalize tools to a Map for easy lookup
     const toolMap = new Map<string, Tool<z.ZodTypeAny>>();
@@ -220,7 +218,7 @@ export async function generateObject<TSchema extends z.ZodTypeAny>(
 
     const systemPreamble =
         options.system ??
-        'You are a structured-output assistant. Always respond by calling the tool `submit_object` exactly once with the final JSON object. Do not include any other text.';
+        'You are a structured output assistant. Understand what the user wants, and then respond by calling the tool `submit_object` once, with the parameter being the JSON data that the user wants.';
 
     const messages: ChatMessage[] = [
         { role: 'system', content: systemPreamble },
