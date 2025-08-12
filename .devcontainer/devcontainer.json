@@ -1,0 +1,10 @@
+{
+  "name": "Qwen Code Dev Container",
+  "image": "mcr.microsoft.com/devcontainers/universal:linux",
+  "postCreateCommand": "npm install -g @qwen-code/qwen-code@latest && touch .env",
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  }
+}
