@@ -1,3 +1,4 @@
+import { g } from 'vitest/dist/chunks/suite.B2jumIFP.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
@@ -6,31 +7,17 @@ export type ChatMessage = {
     content: string;
     tool_calls?: Array<ToolCall>
     tool_call_id?: string
-};
+}
 
 export type Tool<T extends z.ZodTypeAny> = {
-    name: string;
-    description?: string;
-    parameters: T;
-    execute: (args: z.infer<T>) => Promise<string>;
-};
+    name: string
+    description?: string
+    parameters: T
+    execute: (args: z.infer<T>) => Promise<string>
+}
 
-// Helper to create a typed tool with Zod parameters
-export function createTool<T extends z.ZodTypeAny>(options: {
-    name: string;
-    description?: string;
-    parameters: T;
-    execute: (args: z.infer<T>) => Promise<string> | string;
-}): Tool<T> {
-    const wrappedExecute = async (args: z.infer<T>): Promise<string> => {
-        return Promise.resolve(options.execute(args));
-    };
-    return {
-        name: options.name,
-        description: options.description,
-        parameters: options.parameters,
-        execute: wrappedExecute,
-    };
+export function createTool<T extends z.ZodTypeAny>(options: Tool<T>): Tool<T> {
+    return options
 }
 
 type ToolCall = {
@@ -49,163 +36,107 @@ type ChatRespose = {
     }>
 }
 
-// Lightweight OpenAI-style client and text generation with tool support
 export type CreateOpenAIOptions = {
-    baseURL?: string;
-    apiKey?: string;
-};
-
-export type ChatModelRef = {
-    endpoint: string;
-    model: string;
-    apiKey: string;
-};
-
-export type OpenAIClient = ((modelName: string) => ChatModelRef) & {
-    baseURL: string;
-    apiKey: string;
-    chat: (modelName: string) => ChatModelRef;
-};
-
-export function createOpenAI(options: CreateOpenAIOptions = {}): OpenAIClient {
-    const rawBase = options.baseURL ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
-    const base = rawBase.replace(/\/$/, '');
-    const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-        throw new Error('apiKey is required');
-    }
-    const builder = ((modelName?: string): ChatModelRef => {
-        const finalModel = modelName || process.env.OPENAI_MODEL;
-        if (!finalModel) {
-            throw new Error('model is required');
-        }
-        return {
-            endpoint: `${base}/chat/completions`,
-            model: finalModel,
-            apiKey,
-        };
-    }) as OpenAIClient;
-    builder.baseURL = base;
-    builder.apiKey = apiKey;
-    return builder;
+    baseURL?: string
+    apiKey?: string
+    model?: string
 }
 
-export type GenerateTextOptions =
-    | {
-          model: ChatModelRef; // legacy: pass pre-bound model ref
-          messages: ChatMessage[];
-          tools?: Array<Tool<z.ZodTypeAny>> | Record<string, Tool<z.ZodTypeAny>>;
-          onToolCall?: (toolName: string) => void;
-      }
-    | {
-          client: OpenAIClient; // preferred: pass client and model string
-          model: string;
-          messages: ChatMessage[];
-          tools?: Array<Tool<z.ZodTypeAny>> | Record<string, Tool<z.ZodTypeAny>>;
-          onToolCall?: (toolName: string) => void;
-      };
+class OpenAI {
+    private _baseURL: string
+    apiKey: string
+    endpoint: string
+    model: string
+    set baseURL(baseURL: string) {
+        this._baseURL = baseURL.replace(/\/$/, '')
+        this.endpoint = `${this._baseURL}/chat/completions`
+    }
+}
+
+export function createOpenAI(options: CreateOpenAIOptions = {}): OpenAI {
+    let openai = new OpenAI()
+    openai.baseURL = options.baseURL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+    openai.model = options.model || process.env.OPENAI_MODEL || ''
+    openai.apiKey = options.apiKey || process.env.OPENAI_API_KEY || ''
+    return openai
+}
+
+export type GenerateTextOptions = {
+    openai?: OpenAI
+    messages: ChatMessage[]
+    tools?: Array<Tool<z.ZodTypeAny>>
+    onToolCall?: (toolName: string) => void
+}
+
+function generateToolsJsonSchema(tools: Tool<z.ZodTypeAny>[]) {
+    return tools.map(t => ({
+        type: 'function' as const,
+        function: {
+            name: t.name,
+            description: t.description,
+            parameters: zodToJsonSchema(t.parameters),
+        },
+    }))
+}
 
 export async function generateText(options: GenerateTextOptions): Promise<string> {
-    const { messages, onToolCall } = options as any;
-    const messageHistory: ChatMessage[] = messages;
-
-    // Normalize tools to a Map for easy lookup
-    const toolMap = new Map<string, Tool<z.ZodTypeAny>>();
-    const toolsInput = (options as any).tools as Array<Tool<z.ZodTypeAny>> | Record<string, Tool<z.ZodTypeAny>> | undefined;
-    if (Array.isArray(toolsInput)) {
-        for (const t of toolsInput) toolMap.set(t.name, t as Tool<z.ZodTypeAny>);
-    } else if (toolsInput && typeof toolsInput === 'object') {
-        for (const [name, t] of Object.entries(toolsInput)) toolMap.set(name, t as Tool<z.ZodTypeAny>);
-    }
-
-    const toolsJsonSchema = toolMap.size
-        ? Array.from(toolMap.values()).map(t => ({
-              type: 'function' as const,
-              function: {
-                  name: t.name,
-                  description: t.description,
-                  parameters: zodToJsonSchema(t.parameters),
-              },
-          }))
-        : undefined;
-
-    // Normalize transport pieces
-    const baseURL = ('client' in options
-        ? (options.client as OpenAIClient).baseURL
-        : (options.model as ChatModelRef).endpoint.replace(/\/chat\/completions$/, '')).replace(/\/$/, '');
-
-    const endpoint = `${baseURL}/chat/completions`;
-    const apiKey = 'client' in options ? options.client.apiKey : (options.model as ChatModelRef).apiKey;
-    const modelName = 'client' in options ? (options.model as string) : (options.model as ChatModelRef).model;
-    if (!modelName) {
-        throw new Error('model is required');
-    }
+    const openai = options.openai || createOpenAI()
 
     while (true) {
-        const res: ChatRespose = await fetch(endpoint, {
+        const res: ChatRespose = await fetch(openai.endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${apiKey}`,
+                Authorization: `Bearer ${openai.apiKey}`,
             },
             body: JSON.stringify({
-                model: modelName,
-                messages: messageHistory,
-                tools: toolsJsonSchema,
+                model: openai.model,
+                messages: options.messages,
+                tools: generateToolsJsonSchema(options.tools || []),
             }),
-        }).then(r => r.json());
+        }).then(r => r.json())
 
-        const assistant = res.choices?.[0]?.message;
+        const assistant = res.choices?.[0]?.message
         if (!assistant) {
-            throw new Error('No message returned');
+            throw new Error('No assistant message returned')
         }
 
-        messageHistory.push(assistant);
+        options.messages.push(assistant)
 
-        const tool_calls = assistant.tool_calls;
+        const tool_calls = assistant.tool_calls
         if (!tool_calls || tool_calls.length === 0) {
-            return assistant.content || '';
+            return assistant.content || ''
         }
 
-        if (onToolCall) {
-            const toolNames = tool_calls.map(c => c.function.name);
-            toolNames.forEach(name => onToolCall(name));
+        if (options.onToolCall) {
+            tool_calls.forEach(call => {
+                options.onToolCall!(call.function.name)
+            })
         }
 
-        // Execute tools in sequence (can be parallelized if needed)
         for (const call of tool_calls) {
-            const tool = toolMap.get(call.function.name);
+            const tool = options.tools?.find(t => t.name === call.function.name)
             if (!tool) {
-                throw new Error(`Tool ${call.function.name} not found`);
+                throw new Error(`Tool ${call.function.name} not found`)
             }
 
-            const args = tool.parameters.parse(JSON.parse(call.function.arguments));
-            const result = await tool.execute(args);
+            const args = tool.parameters.parse(JSON.parse(call.function.arguments))
+            const result = await tool.execute(args)
 
-            messageHistory.push({
+            options.messages.push({
                 role: 'tool',
                 content: result,
                 tool_call_id: call.id,
-            });
+            })
         }
-        // Loop will continue, sending the tool outputs back to the model
     }
 }
 
-export type GenerateObjectOptions<TSchema extends z.ZodTypeAny> =
-    | {
-          model: ChatModelRef;
-          schema: TSchema;
-          prompt: string;
-          system?: string;
-      }
-    | {
-          client: OpenAIClient;
-          model: string;
-          schema: TSchema;
-          prompt: string;
-          system?: string;
-      };
+export type GenerateObjectOptions<TSchema extends z.ZodTypeAny> = {
+    openai?: OpenAI
+    messages: ChatMessage[]
+    schema: TSchema
+}
 
 /**
  * Generate a structured object validated by the provided Zod schema.
@@ -214,75 +145,49 @@ export type GenerateObjectOptions<TSchema extends z.ZodTypeAny> =
 export async function generateObject<TSchema extends z.ZodTypeAny>(
     options: GenerateObjectOptions<TSchema>
 ): Promise<{ object: z.infer<TSchema> }> {
-    const schema = options.schema;
+    const openai = options.openai || createOpenAI()
 
-    const baseURL = ('client' in options
-        ? (options.client as OpenAIClient).baseURL
-        : (options.model as ChatModelRef).endpoint.replace(/\/(?:chat\/completions)?$/, ''))
-        .replace(/\/$/, '');
+    if (!options.messages.find(m => m.role === 'system')) {
+        options.messages.push({
+            role: 'system',
+            content: 'You are a structured output assistant. Understand what the user wants, and then respond by calling the tool `submit_object` once, with the parameter being the JSON data that the user wants.'
+        })
+    }
 
-    const endpoint = `${baseURL}/chat/completions`;
-    const apiKey = 'client' in options ? options.client.apiKey : (options.model as ChatModelRef).apiKey;
-    const modelName = 'client' in options ? (options.model as string) : (options.model as ChatModelRef).model;
+    const submit_object = createTool({
+        name: 'submit_object',
+        description: 'Submit the final structured object that matches the required schema.',
+        parameters: options.schema,
+        execute: async (args) => {
+            return JSON.stringify(args)
+        }
+    })
 
-    const systemPreamble =
-        options.system ??
-        'You are a structured output assistant. Understand what the user wants, and then respond by calling the tool `submit_object` once, with the parameter being the JSON data that the user wants.';
-
-    const messages: ChatMessage[] = [
-        { role: 'system', content: systemPreamble },
-        { role: 'user', content: options.prompt },
-    ];
-
-    const tools = [
-        {
-            type: 'function' as const,
-            function: {
-                name: 'submit_object',
-                description: 'Submit the final structured object that matches the required schema.',
-                parameters: zodToJsonSchema(schema),
-            },
-        },
-    ];
-
-    const res: ChatRespose = await fetch(endpoint, {
+    const res: ChatRespose = await fetch(openai.endpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
+            Authorization: `Bearer ${openai.apiKey}`,
         },
         body: JSON.stringify({
-            model: modelName,
-            messages,
-            tools,
+            model: openai.model,
+            messages: options.messages,
+            tools: generateToolsJsonSchema([submit_object]),
         }),
-    }).then(r => r.json());
+    }).then(r => r.json())
 
-    const assistant = res.choices?.[0]?.message;
+    const assistant = res.choices?.[0]?.message
     if (!assistant) {
-        throw new Error('No message returned');
+        throw new Error('No assistant message returned')
     }
 
-    // Prefer tool call for guaranteed structure
-    const toolCalls = assistant.tool_calls ?? [];
-    const submitCall = toolCalls.find(c => c.function?.name === 'submit_object');
+    const toolCalls = assistant.tool_calls ?? []
+    const submitCall = toolCalls.find(c => c.function.name === 'submit_object')
     if (submitCall) {
-        const rawArgs = submitCall.function.arguments || '{}';
-        const parsed = JSON.parse(rawArgs);
-        const object = schema.parse(parsed);
-        return object;
+        const parsed = JSON.parse(submitCall.function.arguments)
+        const object = options.schema.parse(parsed)
+        return object
     }
 
-    // Fallback: try to parse the assistant content as JSON and validate
-    if (assistant.content) {
-        try {
-            const fallback = JSON.parse(assistant.content);
-            const validated = schema.parse(fallback);
-            return { object: validated };
-        } catch (_err) {
-            // continue to throw structured error below
-        }
-    }
-
-    throw new Error('Model did not return a structured object. Ensure the model supports tool calling.');
+    throw new Error('Model did not return a structured object. Ensure the model supports tool calling.')
 }
