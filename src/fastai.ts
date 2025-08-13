@@ -50,6 +50,66 @@ class OpenAI {
         this._baseURL = baseURL.replace(/\/$/, '')
         this.endpoint = `${this._baseURL}/chat/completions`
     }
+    messages: ChatMessage[]
+    tools: Tool<z.ZodTypeAny>[]
+    onToolCall?: (toolName: string) => void
+    async chat(msg?: string, generateObject = false): Promise<string> {
+        if (msg) {
+            this.messages.push({ role: 'user', content: msg })
+        }
+        while (true) {
+            const res: ChatRespose = await fetch(this.endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${this.apiKey}`,
+                },
+                body: JSON.stringify({
+                    model: this.model,
+                    messages: this.messages,
+                    tools: generateToolsJsonSchema(this.tools || []),
+                }),
+            }).then(r => r.json())
+
+            const assistant = res.choices?.[0]?.message
+            if (!assistant) {
+                throw new Error('No assistant message returned')
+            }
+
+            this.messages.push(assistant)
+
+            const tool_calls = assistant.tool_calls
+            if (!tool_calls || tool_calls.length === 0) {
+                return assistant.content || ''
+            }
+
+            if (this.onToolCall) {
+                tool_calls.forEach(call => {
+                    this.onToolCall?.(call.function.name)
+                })
+            }
+
+            for (const call of tool_calls) {
+                const tool = this.tools?.find(t => t.name === call.function.name)
+                if (!tool) {
+                    throw new Error(`Tool ${call.function.name} not found`)
+                }
+
+                if (generateObject) {
+                    return call.function.arguments
+                }
+
+                const args = tool.parameters.parse(JSON.parse(call.function.arguments))
+                const result = await tool.execute(args)
+
+                this.messages.push({
+                    role: 'tool',
+                    content: result,
+                    tool_call_id: call.id,
+                })
+            }
+        }
+    }
 }
 
 export function createOpenAI(options: CreateOpenAIOptions = {}): OpenAI {
@@ -80,55 +140,9 @@ function generateToolsJsonSchema(tools: Tool<z.ZodTypeAny>[]) {
 
 export async function generateText(options: GenerateTextOptions): Promise<string> {
     const openai = options.openai || createOpenAI()
-
-    while (true) {
-        const res: ChatRespose = await fetch(openai.endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${openai.apiKey}`,
-            },
-            body: JSON.stringify({
-                model: openai.model,
-                messages: options.messages,
-                tools: generateToolsJsonSchema(options.tools || []),
-            }),
-        }).then(r => r.json())
-
-        const assistant = res.choices?.[0]?.message
-        if (!assistant) {
-            throw new Error('No assistant message returned')
-        }
-
-        options.messages.push(assistant)
-
-        const tool_calls = assistant.tool_calls
-        if (!tool_calls || tool_calls.length === 0) {
-            return assistant.content || ''
-        }
-
-        if (options.onToolCall) {
-            tool_calls.forEach(call => {
-                options.onToolCall!(call.function.name)
-            })
-        }
-
-        for (const call of tool_calls) {
-            const tool = options.tools?.find(t => t.name === call.function.name)
-            if (!tool) {
-                throw new Error(`Tool ${call.function.name} not found`)
-            }
-
-            const args = tool.parameters.parse(JSON.parse(call.function.arguments))
-            const result = await tool.execute(args)
-
-            options.messages.push({
-                role: 'tool',
-                content: result,
-                tool_call_id: call.id,
-            })
-        }
-    }
+    openai.messages = options.messages
+    openai.tools = options.tools || []
+    return openai.chat()
 }
 
 export type GenerateObjectOptions<TSchema extends z.ZodTypeAny> = {
@@ -145,6 +159,7 @@ export async function generateObject<TSchema extends z.ZodTypeAny>(
     options: GenerateObjectOptions<TSchema>
 ): Promise<{ object: z.infer<TSchema> }> {
     const openai = options.openai || createOpenAI()
+    openai.messages = options.messages
 
     if (!options.messages.find(m => m.role === 'system')) {
         options.messages.push({
@@ -158,34 +173,23 @@ export async function generateObject<TSchema extends z.ZodTypeAny>(
         description: 'Submit the final structured object that matches the required schema.',
         parameters: options.schema,
         execute: async (args) => {
-            return JSON.stringify(args)
+            return 'Object submitted.'
         }
     })
 
-    const res: ChatRespose = await fetch(openai.endpoint, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${openai.apiKey}`,
-        },
-        body: JSON.stringify({
-            model: openai.model,
-            messages: options.messages,
-            tools: generateToolsJsonSchema([submit_object as any]),
-        }),
-    }).then(r => r.json())
+    openai.tools = [submit_object as any]
 
-    const assistant = res.choices?.[0]?.message
-    if (!assistant) {
-        throw new Error('No assistant message returned')
-    }
+    const res = await openai.chat(undefined, true)
 
-    const toolCalls = assistant.tool_calls ?? []
-    const submitCall = toolCalls.find(c => c.function.name === 'submit_object')
-    if (submitCall) {
-        const parsed = JSON.parse(submitCall.function.arguments)
-        const object = options.schema.parse(parsed)
-        return object
+    if (res) {
+        try {
+            const obj = JSON.parse(res)
+            const parsed = options.schema.parse(obj)
+            return parsed
+        } catch (e) {
+            console.error(res)
+            throw new Error(`Failed to parse generated object: ${e}`)
+        }
     }
 
     throw new Error('Model did not return a structured object. Ensure the model supports tool calling.')
