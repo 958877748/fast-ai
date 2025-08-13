@@ -74,7 +74,7 @@ export function createOpenAI(options: CreateOpenAIOptions = {}): OpenAIClient {
     if (!apiKey) {
         throw new Error('apiKey is required');
     }
-    const builder = ((modelName: string): ChatModelRef => {
+    const builder = ((modelName?: string): ChatModelRef => {
         const finalModel = modelName || process.env.OPENAI_MODEL;
         if (!finalModel) {
             throw new Error('model is required');
@@ -87,7 +87,6 @@ export function createOpenAI(options: CreateOpenAIOptions = {}): OpenAIClient {
     }) as OpenAIClient;
     builder.baseURL = base;
     builder.apiKey = apiKey;
-    builder.chat = (modelName: string) => builder(modelName);
     return builder;
 }
 
@@ -270,8 +269,8 @@ export async function generateObject<TSchema extends z.ZodTypeAny>(
     if (submitCall) {
         const rawArgs = submitCall.function.arguments || '{}';
         const parsed = JSON.parse(rawArgs);
-        const validated = schema.parse(parsed);
-        return { object: validated };
+        const object = schema.parse(parsed);
+        return object;
     }
 
     // Fallback: try to parse the assistant content as JSON and validate
