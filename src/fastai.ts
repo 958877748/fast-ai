@@ -1,4 +1,3 @@
-import { g } from 'vitest/dist/chunks/suite.B2jumIFP.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
@@ -172,7 +171,7 @@ export async function generateObject<TSchema extends z.ZodTypeAny>(
         body: JSON.stringify({
             model: openai.model,
             messages: options.messages,
-            tools: generateToolsJsonSchema([submit_object]),
+            tools: generateToolsJsonSchema([submit_object as any]),
         }),
     }).then(r => r.json())
 
