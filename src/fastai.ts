@@ -15,8 +15,8 @@ export type Tool<T extends z.ZodTypeAny> = {
     execute: (args: z.infer<T>) => Promise<string>
 }
 
-export function createTool<T extends z.ZodTypeAny>(options: Tool<T>): Tool<T> {
-    return options
+export function createTool<T extends z.ZodTypeAny>(options: Tool<T>): Tool<z.ZodTypeAny> {
+    return options as any
 }
 
 type ToolCall = {
