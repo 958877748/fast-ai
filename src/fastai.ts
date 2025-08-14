@@ -41,7 +41,7 @@ export type CreateOpenAIOptions = {
     model?: string
 }
 
-class OpenAI {
+export class OpenAI {
     private _baseURL: string
     apiKey: string
     endpoint: string
@@ -110,6 +110,88 @@ class OpenAI {
             }
         }
     }
+
+    /**
+     * Stream chat completions
+     * @param onMsg Callback function that receives chunks of the streaming response
+     */
+    async stream(onMsg: (msg: string, isStop?: boolean) => void): Promise<void> {
+        const controller = new AbortController();
+        const signal = controller.signal;
+        
+        const response = await fetch(this.endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${this.apiKey}`,
+            },
+            body: JSON.stringify({
+                model: this.model,
+                messages: this.messages,
+                tools: generateToolsJsonSchema(this.tools || []),
+                stream: true
+            }),
+            signal
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        if (!response.body) {
+            throw new Error('Response body is null');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) {
+                    // If we have remaining buffer, send it as final message
+                    if (buffer.trim()) {
+                        onMsg(buffer.trim(), true);
+                    }
+                    break;
+                }
+                
+                const chunk = decoder.decode(value);
+                buffer += chunk;
+                
+                // Process complete lines
+                let lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+                
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    
+                    const dataStr = line.slice(6); // Remove 'data: '
+                    if (dataStr === '[DONE]') {
+                        onMsg('', true); // Signal end of stream
+                        return;
+                    }
+                    
+                    try {
+                        const data = JSON.parse(dataStr);
+                        
+                        // Extract content from delta
+                        const delta = data.choices?.[0]?.delta;
+                        if (delta && delta.content) {
+                            onMsg(delta.content, false);
+                        }
+                    } catch (e) {
+                        // Handle parsing errors gracefully
+                        console.error('Error parsing stream data:', e);
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
+    }
 }
 
 export function createOpenAI(options: CreateOpenAIOptions = {}): OpenAI {
@@ -128,6 +210,8 @@ export type GenerateTextOptions = {
 }
 
 function generateToolsJsonSchema(tools: Tool<z.ZodTypeAny>[]) {
+    if (!tools) return null
+    if (tools.length === 0) return null
     return tools.map(t => ({
         type: 'function' as const,
         function: {
