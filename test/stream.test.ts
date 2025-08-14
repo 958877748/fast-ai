@@ -6,12 +6,12 @@ global.fetch = vi.fn();
 
 describe('OpenAI.stream', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
-  
+
   beforeEach(() => {
     mockFetch = vi.fn();
     (global.fetch as ReturnType<typeof vi.fn>) = mockFetch;
   });
-  
+
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -27,7 +27,7 @@ describe('OpenAI.stream', () => {
         headers: { 'Content-Type': 'text/event-stream' }
       }
     );
-    
+
     mockFetch.mockResolvedValue(mockResponse);
 
     const openai = createOpenAI({
@@ -36,10 +36,9 @@ describe('OpenAI.stream', () => {
       model: 'gpt-4'
     });
 
-    openai.messages = [
-      { role: 'user', content: 'Hello' }
-    ];
-    
+    // Clear messages before each test
+    openai.messages = [];
+
     const messages: string[] = [];
     const onMsg = (msg: string, isStop?: boolean) => {
       if (!isStop) {
@@ -47,8 +46,8 @@ describe('OpenAI.stream', () => {
       }
     };
 
-    await openai.stream(onMsg);
-    
+    await openai.stream('hello', onMsg);
+
     expect(messages).toEqual(['Hello', ' world', '!']);
     expect(mockFetch).toHaveBeenCalledWith(
       'https://api.openai.com/v1/chat/completions',
@@ -56,7 +55,7 @@ describe('OpenAI.stream', () => {
         method: 'POST',
         body: JSON.stringify({
           model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hello' }],
+          messages: [{ role: 'user', content: 'hello' }],
           tools: null,
           stream: true
         })
@@ -72,7 +71,7 @@ describe('OpenAI.stream', () => {
         headers: { 'Content-Type': 'text/event-stream' }
       }
     );
-    
+
     mockFetch.mockResolvedValue(mockResponse);
 
     const openai = createOpenAI({
@@ -81,10 +80,9 @@ describe('OpenAI.stream', () => {
       model: 'gpt-4'
     });
 
-    openai.messages = [
-      { role: 'user', content: 'Hello' }
-    ];
-    
+    // Clear messages before each test
+    openai.messages = [];
+
     const messages: string[] = [];
     const onMsg = (msg: string, isStop?: boolean) => {
       if (!isStop) {
@@ -92,8 +90,8 @@ describe('OpenAI.stream', () => {
       }
     };
 
-    await openai.stream(onMsg);
-    
+    await openai.stream('hello', onMsg);
+
     expect(messages).toEqual([]);
   });
 
@@ -106,12 +104,11 @@ describe('OpenAI.stream', () => {
       model: 'gpt-4'
     });
 
-    openai.messages = [
-      { role: 'user', content: 'Hello' }
-    ];
-    
+    // Clear messages before each test
+    openai.messages = [];
+
     const onMsg = vi.fn();
-    
-    await expect(openai.stream(onMsg)).rejects.toThrow('Network error');
+
+    await expect(openai.stream('hello', onMsg)).rejects.toThrow('Network error');
   });
 });

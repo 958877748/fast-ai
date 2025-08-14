@@ -50,8 +50,8 @@ export class OpenAI {
         this._baseURL = baseURL.replace(/\/$/, '')
         this.endpoint = `${this._baseURL}/chat/completions`
     }
-    messages: ChatMessage[]
-    tools: Tool<z.ZodTypeAny>[]
+    messages: ChatMessage[] = []
+    tools: Tool<z.ZodTypeAny>[] = []
     onToolCall?: (toolName: string) => void
     async chat(msg?: string, generateObject = false): Promise<string> {
         if (msg) {
@@ -115,10 +115,14 @@ export class OpenAI {
      * Stream chat completions
      * @param onMsg Callback function that receives chunks of the streaming response
      */
-    async stream(onMsg: (msg: string, isStop?: boolean) => void): Promise<void> {
+    async stream(prompt: string, onMsg: (msg: string, isStop?: boolean) => void): Promise<void> {
+        this.messages.push({
+            role: 'user', content: prompt
+        })
+
         const controller = new AbortController();
         const signal = controller.signal;
-        
+
         const response = await fetch(this.endpoint, {
             method: 'POST',
             headers: {
@@ -145,11 +149,11 @@ export class OpenAI {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-        
+
         try {
             while (true) {
                 const { done, value } = await reader.read();
-                
+
                 if (done) {
                     // If we have remaining buffer, send it as final message
                     if (buffer.trim()) {
@@ -157,26 +161,26 @@ export class OpenAI {
                     }
                     break;
                 }
-                
+
                 const chunk = decoder.decode(value);
                 buffer += chunk;
-                
+
                 // Process complete lines
                 let lines = buffer.split('\n');
                 buffer = lines.pop() || ''; // Keep incomplete line in buffer
-                
+
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
-                    
+
                     const dataStr = line.slice(6); // Remove 'data: '
                     if (dataStr === '[DONE]') {
                         onMsg('', true); // Signal end of stream
                         return;
                     }
-                    
+
                     try {
                         const data = JSON.parse(dataStr);
-                        
+
                         // Extract content from delta
                         const delta = data.choices?.[0]?.delta;
                         if (delta && delta.content) {
